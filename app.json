@@ -1,44 +1,56 @@
 {
   "expo": {
-    "name": "farmora",
+    "name": "Farmora",
     "slug": "farmora",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/farmora-logo.png",
     "scheme": "farmora",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/images/farmora-logo.png",
+      "bundleIdentifier": "com.farmora.app"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#f0fdf4",
+        "foregroundImage": "./assets/images/farmora-logo.png"
       },
+      "package": "com.farmora.app",
+      "versionCode": 1,
       "predictiveBackGestureEnabled": false
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/farmora-logo.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#f0fdf4",
+          "image": "./assets/images/farmora-logo.png",
+          "imageWidth": 200,
           "android": {
-            "image": "./assets/images/splash-icon.png",
-            "imageWidth": 76
+            "image": "./assets/images/farmora-logo.png",
+            "imageWidth": 200
           }
         }
-      ]
+      ],
+      "expo-font",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,
-      "reactCompiler": true
-    }
+      "reactCompiler": false
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "5746f5cf-17e4-4ea1-9c53-f44bea4fa1aa"
+      }
+    },
+    "owner": "bvsrujan"
   }
 }
