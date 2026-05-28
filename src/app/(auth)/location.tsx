@@ -7,13 +7,15 @@ import * as ImagePicker from 'expo-image-picker';
 import { useAppStore } from '../../store/useAppStore';
 import { FarmoraColors } from '../../constants/colors';
 import { useTranslation } from '../../hooks/useTranslation';
+import { Bell } from 'lucide-react-native';
+import { registerForNotificationsAsync } from '../../utils/notifications';
 
 export default function PermissionScreen() {
   const router = useRouter();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const { setLocationPermission, setLocation, setOnboardingCompleted } = useAppStore();
-  const [step, setStep] = useState<'location' | 'camera' | 'media'>('location');
+  const { setLocationPermission, setLocation, setPermissionsCompleted } = useAppStore();
+  const [step, setStep] = useState<'location' | 'notification' | 'camera' | 'media'>('location');
   const [loading, setLoading] = useState(false);
 
   const handleLocationAllow = async () => {
@@ -51,13 +53,29 @@ export default function PermissionScreen() {
       setLocation('', null, null);
     } finally {
       setLoading(false);
-      setStep('camera');
+      setStep('notification');
     }
   };
 
   const handleLocationSkip = () => {
     setLocationPermission(false);
     setLocation('', null, null);
+    setStep('notification');
+  };
+
+  const handleNotificationAllow = async () => {
+    setLoading(true);
+    try {
+      await registerForNotificationsAsync();
+    } catch (error) {
+      console.log('Notification permission error:', error);
+    } finally {
+      setLoading(false);
+      setStep('camera');
+    }
+  };
+
+  const handleNotificationSkip = () => {
     setStep('camera');
   };
 
@@ -91,14 +109,14 @@ export default function PermissionScreen() {
       console.log('Media permission error:', error);
     } finally {
       setLoading(false);
-      setOnboardingCompleted(true);
-      router.replace('/(tabs)');
+      setPermissionsCompleted(true);
+      router.replace('/(auth)/user-details');
     }
   };
 
   const handleMediaSkip = () => {
-    setOnboardingCompleted(true);
-    router.replace('/(tabs)');
+    setPermissionsCompleted(true);
+    router.replace('/(auth)/user-details');
   };
 
   return (
@@ -144,6 +162,45 @@ export default function PermissionScreen() {
           </View>
         </View>
       )}
+
+      {step === 'notification' && (
+        <View style={styles.content}>
+          {/* Central Notification illustration */}
+          <View style={styles.imageContainer}>
+            <View style={[styles.image, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#ecfdf5', borderRadius: 9999, width: 220, height: 220 }]}>
+              <Bell size={110} color="#10B981" />
+            </View>
+          </View>
+
+          {/* Heading and Description */}
+          <View style={styles.textContainer}>
+            <Text style={styles.title}>{t('allow_notifications') || 'Enable Notifications'}</Text>
+            <Text style={styles.subtitle}>
+              {t('notifications_desc') || 'Stay updated with live weather alerts, market price changes, and critical crop care reminders.'}
+            </Text>
+          </View>
+
+          {/* Bottom Row Buttons */}
+          <View style={styles.buttonRow}>
+            <TouchableOpacity onPress={handleNotificationSkip} disabled={loading} style={styles.skipButton}>
+              <Text style={styles.skipText}>{t('skip') || 'Skip'}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              onPress={handleNotificationAllow} 
+              disabled={loading}
+              style={[styles.allowButton, { backgroundColor: '#10B981' }]} 
+            >
+              {loading ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <Text style={styles.allowText}>{t('allow') || 'Allow'}</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
 
       {step === 'camera' && (
         <View style={styles.content}>

@@ -152,12 +152,18 @@ export default function UserDetailsScreen() {
     setSelectedState(stateName);
     setSelectedDistrict(null);
     setSelectedMandal(null);
+    if (errors.state) {
+      setErrors((prev) => ({ ...prev, state: '' }));
+    }
   };
 
   // Handler for district dropdown selection changes
   const handleDistrictChange = (districtName: string) => {
     setSelectedDistrict(districtName);
     setSelectedMandal(null);
+    if (errors.district) {
+      setErrors((prev) => ({ ...prev, district: '' }));
+    }
   };
 
   const validate = () => {
@@ -166,6 +172,10 @@ export default function UserDetailsScreen() {
     if (!phone.trim()) newErrors.phone = t('Phone number is required');
     else if (phone.trim().length < 8) newErrors.phone = t('Enter a valid phone number');
     
+    if (!selectedState) newErrors.state = t('State is required');
+    if (!selectedDistrict) newErrors.district = t('District is required');
+    if (!selectedMandal) newErrors.mandal = t('Mandal is required');
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -198,7 +208,7 @@ export default function UserDetailsScreen() {
       if (user?.id && !user.id.startsWith('mock_')) {
         await authService.upsertProfile(updatedProfile);
       }
-      setProfile(updatedProfile);
+      await setProfile(updatedProfile);
       setLanguage(selectedLang);
       setLocation(resolvedLocName, null, null);
       
@@ -207,11 +217,12 @@ export default function UserDetailsScreen() {
           { text: 'OK', onPress: () => router.back() }
         ]);
       } else {
-        router.replace('/(auth)/location');
+        await setOnboardingCompleted(true);
+        router.replace('/(tabs)');
       }
     } catch (error: any) {
       console.log('Error saving profile, bypassing:', error.message);
-      setProfile(updatedProfile);
+      await setProfile(updatedProfile);
       setLanguage(selectedLang);
       setLangStoreLanguage(code);
       setLocation(resolvedLocName, null, null);
@@ -221,38 +232,12 @@ export default function UserDetailsScreen() {
           { text: 'OK', onPress: () => router.back() }
         ]);
       } else {
-        router.replace('/(auth)/location');
+        await setOnboardingCompleted(true);
+        router.replace('/(tabs)');
       }
     } finally {
       setSubmitLoading(false);
     }
-  };
-
-  const handleSkip = async () => {
-    setSubmitLoading(true);
-    const code = nameToCodeMap[selectedLang] || 'en';
-    const defaultProfile = {
-      ...profile,
-      id: user?.id || 'mock_user_123',
-      email: user?.email || profile?.email || undefined,
-      full_name: fullName || profile?.full_name || 'Agri Farmer',
-      phone_number: phone ? `${phoneCode} ${phone}` : '+91 98765 43210',
-      language: selectedLang,
-      avatar_url: avatar || undefined,
-      location_name: selectedMandal ? `${selectedMandal}, ${selectedDistrict}, ${selectedState}` : 'Nellore, Andhra Pradesh',
-      state: selectedState || 'Andhra Pradesh',
-      district: selectedDistrict || 'Nellore',
-      mandal: selectedMandal || 'Nellore',
-      role: profile?.role || 'farmer',
-    };
-    
-    setLangStoreLanguage(code);
-
-    setProfile(defaultProfile);
-    setLanguage(selectedLang);
-    setLocation(defaultProfile.location_name, null, null);
-    setSubmitLoading(false);
-    router.replace('/(auth)/location');
   };
 
   return (
@@ -265,7 +250,13 @@ export default function UserDetailsScreen() {
       {isOnboardingCompleted && (
         <View className="flex-row items-center justify-between px-5 py-4 bg-white border-b border-slate-100">
           <TouchableOpacity 
-            onPress={() => router.back()} 
+            onPress={() => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/(tabs)/profile');
+              }
+            }} 
             className="w-10 h-10 rounded-full bg-slate-100 items-center justify-center active:scale-95"
           >
             <ArrowLeft size={18} color="#1E293B" />
@@ -443,6 +434,7 @@ export default function UserDetailsScreen() {
               data={states}
               value={selectedState}
               onChange={handleStateChange}
+              error={errors.state}
             />
 
             {/* District selector */}
@@ -453,6 +445,7 @@ export default function UserDetailsScreen() {
               value={selectedDistrict}
               onChange={handleDistrictChange}
               disabled={!selectedState}
+              error={errors.district}
             />
 
             {/* Mandal selector */}
@@ -461,8 +454,14 @@ export default function UserDetailsScreen() {
               placeholder={selectedDistrict ? (t("Select Mandal") || "Select Mandal") : (t("First select District") || "First select District")}
               data={mandals}
               value={selectedMandal}
-              onChange={setSelectedMandal}
+              onChange={(value) => {
+                setSelectedMandal(value);
+                if (errors.mandal) {
+                  setErrors((prev) => ({ ...prev, mandal: '' }));
+                }
+              }}
               disabled={!selectedDistrict}
+              error={errors.mandal}
             />
 
             {/* Custom Dropdown for Preferred Language */}
@@ -544,20 +543,6 @@ export default function UserDetailsScreen() {
               showArrow={!isOnboardingCompleted}
               style={{ width: '100%', height: 52 }}
             />
-
-            {/* Skip Option */}
-            {!isOnboardingCompleted && (
-              <TouchableOpacity 
-                onPress={handleSkip} 
-                disabled={submitLoading} 
-                className="items-center mt-4 py-1"
-              >
-                <Text style={{ fontFamily: 'Inter', fontSize: 13, fontWeight: '600', color: FarmoraColors.textGray }}>
-                  {t('Skip for now')}
-                </Text>
-              </TouchableOpacity>
-            )}
-
           </Card>
 
         </ScrollView>

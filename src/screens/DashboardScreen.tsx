@@ -12,6 +12,7 @@ import { WeatherSummary } from '../components/WeatherSummary';
 import { RainWarningCard } from '../components/RainWarningCard';
 import { mockTasks } from '../data/mockTasks';
 import { openGoogleMapsSearch } from '../utils/maps';
+import { openWebLink } from '../utils/browser';
 
 const todayDate = new Date();
 const todayStr = `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, '0')}-${String(todayDate.getDate()).padStart(2, '0')}`;
@@ -110,7 +111,7 @@ export default function DashboardScreen() {
           <View className="flex-row gap-3">
             {/* Market Trendings */}
             <TouchableOpacity 
-              onPress={() => router.push('/market-trendings')} 
+              onPress={() => openWebLink('https://agmarknet.gov.in/home')} 
               style={{ borderRadius: 24 }}
               className="flex-1 bg-white p-4 border border-slate-100 shadow-sm active:scale-95"
             >
@@ -127,11 +128,7 @@ export default function DashboardScreen() {
 
             {/* Government Schemes */}
             <TouchableOpacity 
-              onPress={() => {
-                Linking.openURL('https://www.myscheme.gov.in/search').catch(() => {
-                  Alert.alert('Error', 'Unable to open link on this device.');
-                });
-              }} 
+              onPress={() => openWebLink('https://www.myscheme.gov.in/search')} 
               style={{ borderRadius: 24 }}
               className="flex-1 bg-white p-4 border border-slate-100 shadow-sm active:scale-95"
             >

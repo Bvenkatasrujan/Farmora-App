@@ -124,8 +124,8 @@ export default function WelcomeScreen() {
         <View className="mb-6">
           <Button
             title={t('get_started')}
-            onPress={() => {
-              setHasStarted(true);
+            onPress={async () => {
+              await setHasStarted(true);
               router.push('/(auth)/language');
             }}
             variant="primary"

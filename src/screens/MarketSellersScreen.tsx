@@ -1,13 +1,13 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { View, Text, ScrollView } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SearchableDropdown } from '../components/SearchableDropdown';
 import { CropSelector } from '../components/CropSelector';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { marketStyles } from '../styles/marketStyles';
-import { openGoogleMapsSearch } from '../utils/maps';
+import { openGoogleMapsSearch, MapSearchCategory } from '../utils/maps';
 import locationsData from '../data/locations.json';
-import { MapPin } from 'lucide-react-native';
+import { MapPin, Landmark, Factory, Store } from 'lucide-react-native';
 import { useAppStore } from '../store/useAppStore';
 import { HomeHeader } from '../components/HomeHeader';
 
@@ -19,6 +19,7 @@ export default function MarketSellersScreen() {
   const [selectedDistrict, setSelectedDistrict] = useState<string | null>(profile?.district || null);
   const [selectedMandal, setSelectedMandal] = useState<string | null>(profile?.mandal || null);
   const [selectedCrop, setSelectedCrop] = useState<string | null>(null);
+  const [searchCategory, setSearchCategory] = useState<MapSearchCategory>('markets');
 
   // Sync profile when it loads
   useEffect(() => {
@@ -65,7 +66,7 @@ export default function MarketSellersScreen() {
   };
 
   const handleSearch = () => {
-    openGoogleMapsSearch(selectedCrop, selectedMandal, selectedDistrict, selectedState);
+    openGoogleMapsSearch(selectedCrop, selectedMandal, selectedDistrict, selectedState, searchCategory);
   };
 
   const isFormComplete = !!(selectedState && selectedDistrict && selectedMandal && selectedCrop);
@@ -120,6 +121,72 @@ export default function MarketSellersScreen() {
           <View style={marketStyles.fieldGroup}>
             <Text style={marketStyles.fieldLabel}>Crop to Sell</Text>
             <CropSelector selectedCrop={selectedCrop} onSelectCrop={setSelectedCrop} />
+          </View>
+
+          {/* Search Category Selector */}
+          <View style={marketStyles.fieldGroup}>
+            <Text style={marketStyles.fieldLabel}>Search Category</Text>
+            <View style={marketStyles.toggleRow}>
+              <TouchableOpacity
+                style={[
+                  marketStyles.toggleBtn,
+                  searchCategory === 'markets' && marketStyles.toggleBtnActive,
+                ]}
+                onPress={() => setSearchCategory('markets')}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Landmark size={15} color={searchCategory === 'markets' ? 'white' : '#666666'} />
+                  <Text
+                    style={[
+                      marketStyles.toggleBtnText,
+                      searchCategory === 'markets' && marketStyles.toggleBtnTextActive,
+                    ]}
+                  >
+                    Markets
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  marketStyles.toggleBtn,
+                  searchCategory === 'mills' && marketStyles.toggleBtnActive,
+                ]}
+                onPress={() => setSearchCategory('mills')}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Factory size={15} color={searchCategory === 'mills' ? 'white' : '#666666'} />
+                  <Text
+                    style={[
+                      marketStyles.toggleBtnText,
+                      searchCategory === 'mills' && marketStyles.toggleBtnTextActive,
+                    ]}
+                  >
+                    Mills
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  marketStyles.toggleBtn,
+                  searchCategory === 'shops' && marketStyles.toggleBtnActive,
+                ]}
+                onPress={() => setSearchCategory('shops')}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Store size={15} color={searchCategory === 'shops' ? 'white' : '#666666'} />
+                  <Text
+                    style={[
+                      marketStyles.toggleBtnText,
+                      searchCategory === 'shops' && marketStyles.toggleBtnTextActive,
+                    ]}
+                  >
+                    Shops
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Action Maps search button */}

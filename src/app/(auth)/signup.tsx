@@ -180,10 +180,10 @@ function SignupScreen() {
     try {
       const data = await authService.signUp(email, password, fullName, language);
       if (data.user) {
-        setUser(data.user);
+        await setUser(data.user);
         const profile = { id: data.user.id, full_name: fullName, language };
-        setProfile(profile);
-        router.replace('/(auth)/user-details');
+        await setProfile(profile);
+        router.replace('/(auth)/location');
       }
     } catch (e: any) {
       Alert.alert('Signup error', e.message ?? 'Unexpected error');

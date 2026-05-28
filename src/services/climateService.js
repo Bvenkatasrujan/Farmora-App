@@ -6,8 +6,10 @@
 export const climateService = {
   getWeather: async (city) => {
     try {
-      // Clean and default city if invalid
-      const queryCity = !city || city === 'Detecting Location...' ? 'Karnal' : city;
+      if (!city || city === 'Detecting Location...' || city === 'Location not set') {
+        throw new Error('Location not set');
+      }
+      const queryCity = city;
       
       // Check if city name is actually a coordinate pair (latitude, longitude)
       const coordRegex = /^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/;
@@ -42,11 +44,7 @@ export const climateService = {
           name = result.name;
           country = result.country;
         } else {
-          // Fallback to default coordinates (Karnal, Haryana) if geocoding fails
-          latitude = 29.6857;
-          longitude = 76.9905;
-          name = searchName || 'Karnal';
-          country = 'India';
+          throw new Error('Geocoding failed to find location: ' + searchName);
         }
       }
 

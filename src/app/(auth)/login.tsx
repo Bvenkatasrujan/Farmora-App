@@ -11,6 +11,7 @@ import {
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { Mail, Lock, Leaf, X, ChevronRight } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
@@ -147,6 +148,8 @@ function LoginScreen() {
   const setUser = useAppStore((s) => s.setUser);
   const setProfile = useAppStore((s) => s.setProfile);
   const setLanguage = useAppStore((s) => s.setLanguage);
+  const setPermissionsCompleted = useAppStore((s) => s.setPermissionsCompleted);
+  const setOnboardingCompleted = useAppStore((s) => s.setOnboardingCompleted);
   const { t } = useTranslation();
 
   const [email, setEmail] = useState('');
@@ -179,13 +182,31 @@ function LoginScreen() {
     try {
       const data = await authService.signIn(email, password);
       if (data.user) {
-        setUser(data.user);
+        await setUser(data.user);
         const profile = await authService.getProfile(data.user.id);
-        setProfile(profile);
+        await setProfile(profile);
         if (profile?.language) {
           setLanguage(profile.language);
         }
-        router.replace('/(auth)/user-details');
+        
+        // Determine onboarding state
+        let onboardingDone = !!profile?.location_name;
+        try {
+          const storedVal = await AsyncStorage.getItem(`onboarding_completed_${data.user.id}`);
+          if (storedVal === 'true') {
+            onboardingDone = true;
+          }
+        } catch (e) {
+          console.log('Error reading onboarding state:', e);
+        }
+
+        if (onboardingDone) {
+          await setOnboardingCompleted(true);
+          await setPermissionsCompleted(true);
+          router.replace('/(tabs)');
+        } else {
+          router.replace('/(auth)/location');
+        }
       }
     } catch (e: any) {
       Alert.alert('Login error', e.message ?? 'Unexpected error');

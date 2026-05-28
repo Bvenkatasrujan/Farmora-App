@@ -3,29 +3,55 @@ import { createClient } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
 import { mockCropTimeline, CropTimelineEvent } from '../constants/mockData';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsYWNlaG9sZGVyIiwicm9sZSI6ImFub24iLCJpYXQiOjE1OTg4MTQwMDAsImV4cCI6MTkwOTg4MTQwMDB9.placeholder-key';
 
-if (!supabaseUrl || !supabaseAnonKey) {
+if (!process.env.EXPO_PUBLIC_SUPABASE_URL || !process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY) {
   console.warn(
-    'Supabase URL or Anon Key is missing. Ensure your .env file is set up correctly.'
+    'Supabase URL or Anon Key is missing from env. Using built-in placeholder values to prevent startup crash.'
   );
 }
 
-// SSR/static export safe storage wrapper
-const isServer = Platform.OS === 'web' && typeof window === 'undefined';
 const customStorage = {
-  getItem: async (key: string) => {
-    if (isServer) return null;
-    return AsyncStorage.getItem(key);
+  getItem: async (key: string): Promise<string | null> => {
+    try {
+      if (Platform.OS === 'web') {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          return window.localStorage.getItem(key);
+        }
+        return null;
+      }
+      return await AsyncStorage.getItem(key);
+    } catch (e) {
+      console.warn('customStorage getItem failed:', e);
+      return null;
+    }
   },
-  setItem: async (key: string, value: string) => {
-    if (isServer) return;
-    return AsyncStorage.setItem(key, value);
+  setItem: async (key: string, value: string): Promise<void> => {
+    try {
+      if (Platform.OS === 'web') {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          window.localStorage.setItem(key, value);
+        }
+        return;
+      }
+      await AsyncStorage.setItem(key, value);
+    } catch (e) {
+      console.warn('customStorage setItem failed:', e);
+    }
   },
-  removeItem: async (key: string) => {
-    if (isServer) return;
-    return AsyncStorage.removeItem(key);
+  removeItem: async (key: string): Promise<void> => {
+    try {
+      if (Platform.OS === 'web') {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          window.localStorage.removeItem(key);
+        }
+        return;
+      }
+      await AsyncStorage.removeItem(key);
+    } catch (e) {
+      console.warn('customStorage removeItem failed:', e);
+    }
   },
 };
 
@@ -96,7 +122,6 @@ function mapClientProfileToDb(profile: Partial<Profile> & { id: string }): any {
   if (profile.language !== undefined) dbData.language = profile.language;
   if (profile.location_lat !== undefined) dbData.latitude = profile.location_lat;
   if (profile.location_lng !== undefined) dbData.longitude = profile.location_lng;
-  if (profile.location_name !== undefined) dbData.city = profile.location_name;
   if (profile.state !== undefined) dbData.state = profile.state;
   if (profile.district !== undefined) dbData.district = profile.district;
   if (profile.mandal !== undefined) dbData.mandal = profile.mandal;

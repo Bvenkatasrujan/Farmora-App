@@ -25,6 +25,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from '../../hooks/useTranslation';
 import LanguageSwitcher, { languages } from '../../components/LanguageSwitcher';
 import { HomeHeader } from '../../components/HomeHeader';
+import { openWebLink } from '../../utils/browser';
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
@@ -54,7 +55,7 @@ export default function ProfileScreen() {
   };
 
   const avatarUrl = profile?.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200';
-  const displayLocation = locationName || 'Karnal, Haryana';
+  const displayLocation = locationName && locationName !== 'Detecting Location...' ? locationName : 'Location not set';
   const displayName = profile?.full_name || 'Warren';
 
   return (
@@ -181,7 +182,7 @@ export default function ProfileScreen() {
 
             {/* Cover Card 3: Mandi Trends */}
             <TouchableOpacity 
-              onPress={() => router.push('/market-trendings')}
+              onPress={() => openWebLink('https://agmarknet.gov.in/home')}
               className="mb-3 rounded-3xl overflow-hidden active:scale-[0.99]"
               activeOpacity={0.9}
             >
@@ -211,11 +212,7 @@ export default function ProfileScreen() {
 
             {/* Cover Card 4: Govt Schemes */}
             <TouchableOpacity 
-              onPress={() => {
-                Linking.openURL('https://www.myscheme.gov.in/search').catch(() => {
-                  Alert.alert('Error', 'Unable to open link on this device.');
-                });
-              }}
+              onPress={() => openWebLink('https://www.myscheme.gov.in/search')}
               className="rounded-3xl overflow-hidden active:scale-[0.99]"
               activeOpacity={0.9}
             >

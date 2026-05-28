@@ -13,8 +13,12 @@ import {
   savePushTokenToSupabase,
   addNotificationResponseListener
 } from '../utils/notifications';
+import * as Linking from 'expo-linking';
+import { supabase } from '../services/supabase';
 
 SplashScreen.preventAutoHideAsync();
+
+let pendingRecovery = false;
 
 export default function RootLayout() {
   // Use individual selectors to avoid unnecessary re-renders
@@ -23,7 +27,9 @@ export default function RootLayout() {
   const isOnboardingCompleted = useAppStore((s) => s.isOnboardingCompleted);
   const initSession = useAppStore((s) => s.initSession);
   const hasStarted = useAppStore((s) => s.hasStarted);
+  const language_selected = useAppStore((s) => s.language_selected);
   const language = useAppStore((s) => s.language);
+  const permissions_completed = useAppStore((s) => s.permissions_completed);
   
   const router = useRouter();
   const segments = useSegments();
@@ -126,6 +132,55 @@ export default function RootLayout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Handle deep links for Supabase Password Recovery
+  useEffect(() => {
+    const handleDeepLink = async (event: Linking.EventType) => {
+      const url = event.url;
+      if (!url) return;
+      if (url.includes('access_token=') && url.includes('refresh_token=')) {
+        // Parse Hash parameters since Expo Linking might not parse hash accurately
+        const hashStr = url.split('#')[1] || url.split('?')[1];
+        if (hashStr) {
+          const hashParams = hashStr.split('&').reduce((acc, current) => {
+            const [key, value] = current.split('=');
+            acc[key] = value;
+            return acc;
+          }, {} as Record<string, string>);
+          
+          const accessToken = hashParams.access_token;
+          const refreshToken = hashParams.refresh_token;
+          const type = hashParams.type;
+
+          if (accessToken && refreshToken && type === 'recovery') {
+            try {
+              const { error } = await supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken,
+              });
+              if (!error) {
+                pendingRecovery = true;
+                // If app is already ready, navigate immediately
+                // The appReady check requires accessing the latest state, but we'll let the routing useEffect catch it if it's not ready yet.
+                // We'll just set the flag. The routing useEffect will pick it up when appReady becomes true or segments change.
+              }
+            } catch (err) {
+              console.error('Failed to set deep link session:', err);
+            }
+          }
+        }
+      }
+    };
+
+    const subscription = Linking.addEventListener('url', handleDeepLink);
+    Linking.getInitialURL().then((url) => {
+      if (url) handleDeepLink({ url } as Linking.EventType);
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [router]);
+
   // Register push notifications when authenticated
   useEffect(() => {
     if (isAuthenticated && user && !user.id?.startsWith('mock_')) {
@@ -169,30 +224,44 @@ export default function RootLayout() {
   useEffect(() => {
     if (!appReady) return;
 
-    const inAuthGroup = segments[0] === '(auth)';
-    const inTabsGroup = segments[0] === '(tabs)';
-
-    // 1. Splash & Welcome screens first upon launching the app (only if not authenticated)
-    if (!hasStarted && !isAuthenticated) {
-      if (segments[0] !== '(auth)' || (segments[1] !== 'splash' && segments[1] !== 'welcome')) {
-        router.replace('/(auth)/splash');
-      }
+    if (pendingRecovery) {
+      pendingRecovery = false;
+      router.push({ pathname: '/security', params: { recovery: 'true' } });
       return;
     }
 
-    // 2. Auth Flow (if not authenticated, route to language -> login/signup)
+    const inAuthGroup = segments[0] === '(auth)';
+    const inTabsGroup = segments[0] === '(tabs)';
+
+    // 1. Auth Flow (if not authenticated)
     if (!isAuthenticated) {
-      const allowedAuthScreens = ['language', 'login', 'signup'];
-      const currentAuthScreen = segments[1] || '';
-      if (!inAuthGroup || !allowedAuthScreens.includes(currentAuthScreen)) {
-        router.replace('/(auth)/language');
+      if (!hasStarted) {
+        if (segments[0] !== '(auth)' || (segments[1] !== 'splash' && segments[1] !== 'welcome')) {
+          router.replace('/(auth)/splash');
+        }
+      } else if (!language_selected) {
+        if (segments[0] !== '(auth)' || segments[1] !== 'language') {
+          router.replace('/(auth)/language');
+        }
+      } else {
+        // hasStarted is true and language is selected -> route to login or signup
+        const allowedAuthScreens = ['login', 'signup'];
+        const currentAuthScreen = segments[1] || '';
+        if (!inAuthGroup || !allowedAuthScreens.includes(currentAuthScreen)) {
+          router.replace('/(auth)/login');
+        }
       }
+      return;
     } 
-    // 3. Onboarding Flow (if authenticated but onboarding is incomplete, route to user-details -> location)
+    // 2. Permissions Flow (if authenticated but permissions incomplete)
+    else if (!permissions_completed) {
+      if (segments[0] !== '(auth)' || segments[1] !== 'location') {
+        router.replace('/(auth)/location');
+      }
+    }
+    // 3. Onboarding Flow (if authenticated and permissions complete, but onboarding is incomplete)
     else if (!isOnboardingCompleted) {
-      const allowedOnboardingScreens = ['user-details', 'location'];
-      const currentOnboardingScreen = segments[1] || '';
-      if (!inAuthGroup || !allowedOnboardingScreens.includes(currentOnboardingScreen)) {
+      if (segments[0] !== '(auth)' || segments[1] !== 'user-details') {
         router.replace('/(auth)/user-details');
       }
     } 
@@ -200,12 +269,12 @@ export default function RootLayout() {
     else {
       if (inAuthGroup) {
         const currentScreen = segments[1] || '';
-        if (currentScreen !== 'user-details') {
+        if (currentScreen !== 'user-details' && currentScreen !== 'location') {
           router.replace('/(tabs)');
         }
       }
     }
-  }, [isAuthenticated, isOnboardingCompleted, appReady, hasStarted, segments]);
+  }, [isAuthenticated, isOnboardingCompleted, permissions_completed, appReady, hasStarted, language_selected, segments]);
 
   // Loading indicator for splash screen
   if (!appReady) {

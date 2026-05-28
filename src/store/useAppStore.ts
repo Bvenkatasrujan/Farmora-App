@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { mockSellersBuyers, mockProducts, mockCropTimeline, SellerBuyer, Product, CropTimelineEvent } from '../constants/mockData';
-import { authService, databaseService, Profile } from '../services/supabase';
+import { authService, databaseService, Profile, supabase } from '../services/supabase';
 import { sendLocalNotification } from '../utils/notifications';
 
 interface AppState {
@@ -12,6 +12,8 @@ interface AppState {
   isLoading: boolean;
   isOnboardingCompleted: boolean;
   hasStarted: boolean;
+  language_selected: boolean;
+  permissions_completed: boolean;
 
   // Localization & Setup
   language: string;
@@ -33,13 +35,15 @@ interface AppState {
   setChatVisible: (visible: boolean) => void;
 
   // Actions
-  setUser: (user: any) => void;
-  setProfile: (profile: Profile | null) => void;
+  setUser: (user: any) => Promise<void>;
+  setProfile: (profile: Profile | null) => Promise<void>;
   setLanguage: (lang: string) => void;
   setLocationPermission: (granted: boolean) => void;
   setLocation: (name: string, lat: number | null, lng: number | null) => void;
   setOnboardingCompleted: (completed: boolean) => Promise<void>;
-  setHasStarted: (started: boolean) => void;
+  setHasStarted: (started: boolean) => Promise<void>;
+  setLanguageSelected: (selected: boolean) => Promise<void>;
+  setPermissionsCompleted: (completed: boolean) => Promise<void>;
   setSelectedCrop: (crop: string) => void;
   
   // Calendar Actions
@@ -73,6 +77,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   isLoading: true,
   isOnboardingCompleted: false,
   hasStarted: false,
+  language_selected: false,
+  permissions_completed: false,
 
   language: 'English',
   locationPermissionGranted: false,
@@ -178,14 +184,34 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   // Setters
-  setUser: (user) => {
+  setUser: async (user) => {
     set({ user, isAuthenticated: !!user });
+    try {
+      if (user) {
+        await AsyncStorage.setItem('cached_user', JSON.stringify(user));
+      } else {
+        await AsyncStorage.removeItem('cached_user');
+      }
+    } catch (e) {
+      console.error('Error caching user:', e);
+    }
     if (user && !user.id.startsWith('mock_')) {
       get().loadUserData(user.id);
     }
     get().loadNotificationsCount();
   },
-  setProfile: (profile) => set({ profile }),
+  setProfile: async (profile) => {
+    set({ profile });
+    try {
+      if (profile) {
+        await AsyncStorage.setItem('cached_profile', JSON.stringify(profile));
+      } else {
+        await AsyncStorage.removeItem('cached_profile');
+      }
+    } catch (e) {
+      console.error('Error caching profile:', e);
+    }
+  },
   setLanguage: (language) => set({ language }),
   setLocationPermission: (granted) => set({ locationPermissionGranted: granted }),
   setLocation: (locationName, latitude, longitude) => set({ locationName, latitude, longitude }),
@@ -200,7 +226,30 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     }
   },
-  setHasStarted: (hasStarted) => set({ hasStarted }),
+  setHasStarted: async (hasStarted) => {
+    set({ hasStarted });
+    try {
+      await AsyncStorage.setItem('has_started', hasStarted ? 'true' : 'false');
+    } catch (error) {
+      console.error('Error saving hasStarted to AsyncStorage:', error);
+    }
+  },
+  setLanguageSelected: async (language_selected) => {
+    set({ language_selected });
+    try {
+      await AsyncStorage.setItem('language_selected', language_selected ? 'true' : 'false');
+    } catch (error) {
+      console.error('Error saving languageSelected to AsyncStorage:', error);
+    }
+  },
+  setPermissionsCompleted: async (permissions_completed) => {
+    set({ permissions_completed });
+    try {
+      await AsyncStorage.setItem('permissions_completed', permissions_completed ? 'true' : 'false');
+    } catch (error) {
+      console.error('Error saving permissions_completed to AsyncStorage:', error);
+    }
+  },
   
   setSelectedCrop: (crop) => {
     const all = get().allCalendarTasks;
@@ -322,29 +371,127 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Initialize Auth Session
   initSession: async () => {
+    let cachedUser: any = null;
+    let cachedProfile: any = null;
     try {
       set({ isLoading: true });
-      const session = await authService.getSession();
-      if (session?.user) {
-        const profile = await authService.getProfile(session.user.id);
+
+      // 1. Load cached details from AsyncStorage for instant loading
+      let hasStarted = false;
+      let languageSelected = false;
+      let permissionsCompleted = false;
+      try {
+        const storedHasStarted = await AsyncStorage.getItem('has_started');
+        const storedLangSelected = await AsyncStorage.getItem('language_selected');
+        const storedPermissionsCompleted = await AsyncStorage.getItem('permissions_completed');
+        hasStarted = storedHasStarted === 'true';
+        languageSelected = storedLangSelected === 'true';
+        permissionsCompleted = storedPermissionsCompleted === 'true';
+
+        const storedUser = await AsyncStorage.getItem('cached_user');
+        const storedProfile = await AsyncStorage.getItem('cached_profile');
+        if (storedUser) cachedUser = JSON.parse(storedUser);
+        if (storedProfile) cachedProfile = JSON.parse(storedProfile);
+      } catch (e) {
+        console.warn('Failed to load startup state:', e);
+      }
+
+      // If we have cached details, update the store instantly to prevent flashing
+      if (cachedUser) {
+        let onboardingDone = false;
+        try {
+          const storedVal = await AsyncStorage.getItem(`onboarding_completed_${cachedUser.id}`);
+          onboardingDone = storedVal === 'true' || !!cachedProfile?.location_name;
+        } catch (e) {
+          onboardingDone = !!cachedProfile?.location_name;
+        }
+
+        const finalPermissionsCompleted = permissionsCompleted || onboardingDone;
+
+        set({
+          user: cachedUser,
+          profile: cachedProfile,
+          isAuthenticated: true,
+          isOnboardingCompleted: onboardingDone,
+          hasStarted: true,
+          language_selected: true,
+          permissions_completed: finalPermissionsCompleted,
+          language: cachedProfile?.language || 'English',
+          locationName: cachedProfile?.location_name || 'Detecting Location...',
+          latitude: cachedProfile?.location_lat || null,
+          longitude: cachedProfile?.location_lng || null,
+        });
+
+        // Preload cached data
+        await get().loadUserData(cachedUser.id);
+      } else {
+        set({
+          hasStarted,
+          language_selected: languageSelected,
+          permissions_completed: permissionsCompleted,
+        });
+      }
+
+      // 2. Fetch fresh Supabase session
+      let session = null;
+      try {
+        session = await authService.getSession();
+      } catch (err) {
+        console.warn('Failed to get Supabase session, using cache:', err);
+      }
+
+      const activeUser = session?.user || cachedUser;
+
+      if (activeUser) {
+        let profile = cachedProfile;
+        try {
+          if (!activeUser.id.startsWith('mock_')) {
+            const dbProfile = await authService.getProfile(activeUser.id);
+            if (dbProfile) {
+              if (cachedProfile) {
+                // Merge dbProfile over cachedProfile, but keep cachedProfile fields if dbProfile is missing them
+                profile = { ...cachedProfile };
+                for (const key in dbProfile) {
+                  if (dbProfile[key as keyof typeof dbProfile] !== undefined && dbProfile[key as keyof typeof dbProfile] !== null) {
+                    (profile as any)[key] = dbProfile[key as keyof typeof dbProfile];
+                  }
+                }
+              } else {
+                profile = dbProfile;
+              }
+              // Cache fresh merged profile
+              await AsyncStorage.setItem('cached_profile', JSON.stringify(profile));
+            }
+          }
+        } catch (err) {
+          console.warn('Failed to fetch online profile, using cache:', err);
+        }
+
+        // Cache the active user
+        try {
+          await AsyncStorage.setItem('cached_user', JSON.stringify(activeUser));
+        } catch (err) {
+          console.warn('Failed to cache user:', err);
+        }
         
         let onboardingDone = false;
         try {
-          const storedVal = await AsyncStorage.getItem(`onboarding_completed_${session.user.id}`);
-          if (storedVal === 'true') {
-            onboardingDone = true;
-          } else {
-            onboardingDone = !!profile?.location_name;
-          }
+          const storedVal = await AsyncStorage.getItem(`onboarding_completed_${activeUser.id}`);
+          onboardingDone = storedVal === 'true' || !!profile?.location_name;
         } catch (err) {
           onboardingDone = !!profile?.location_name;
         }
 
+        const finalPermissionsCompleted = permissionsCompleted || onboardingDone;
+
         set({
-          user: session.user,
+          user: activeUser,
           profile,
           isAuthenticated: true,
           isOnboardingCompleted: onboardingDone,
+          hasStarted: true,
+          language_selected: true,
+          permissions_completed: finalPermissionsCompleted,
           language: profile?.language || 'English',
           locationName: profile?.location_name || 'Detecting Location...',
           latitude: profile?.location_lat || null,
@@ -352,14 +499,115 @@ export const useAppStore = create<AppState>((set, get) => ({
         });
 
         // Load tasks and diagnosis logs
-        await get().loadUserData(session.user.id);
+        await get().loadUserData(activeUser.id);
         await get().loadNotificationsCount();
       } else {
-        set({ user: null, profile: null, isAuthenticated: false, isOnboardingCompleted: false });
+        set({
+          user: null,
+          profile: null,
+          isAuthenticated: false,
+          isOnboardingCompleted: false,
+          hasStarted,
+          language_selected: languageSelected,
+          permissions_completed: permissionsCompleted,
+        });
         await get().loadNotificationsCount();
       }
+
+      // 3. Subscribe to authentication state changes dynamically
+      supabase.auth.onAuthStateChange(async (event, session) => {
+        console.log(`Supabase auth state changed in store listener: ${event}`);
+        if (session?.user) {
+          const currentUser = session.user;
+          let currentProfile = null;
+          try {
+            if (!currentUser.id.startsWith('mock_')) {
+              currentProfile = await authService.getProfile(currentUser.id);
+            }
+          } catch (err) {
+            console.warn('Auth state change profile load failed:', err);
+          }
+
+          if (currentProfile) {
+            const storedProfileStr = await AsyncStorage.getItem('cached_profile');
+            if (storedProfileStr) {
+              const storedProfile = JSON.parse(storedProfileStr);
+              const mergedProfile = { ...storedProfile };
+              for (const key in currentProfile) {
+                if (currentProfile[key as keyof typeof currentProfile] !== undefined && currentProfile[key as keyof typeof currentProfile] !== null) {
+                  (mergedProfile as any)[key] = currentProfile[key as keyof typeof currentProfile];
+                }
+              }
+              currentProfile = mergedProfile;
+            }
+            await AsyncStorage.setItem('cached_profile', JSON.stringify(currentProfile));
+          } else {
+            const storedProfile = await AsyncStorage.getItem('cached_profile');
+            if (storedProfile) currentProfile = JSON.parse(storedProfile);
+          }
+
+          await AsyncStorage.setItem('cached_user', JSON.stringify(currentUser));
+
+          let onboardingDone = false;
+          try {
+            const storedVal = await AsyncStorage.getItem(`onboarding_completed_${currentUser.id}`);
+            onboardingDone = storedVal === 'true' || !!currentProfile?.location_name;
+          } catch (err) {
+            onboardingDone = !!currentProfile?.location_name;
+          }
+
+          let storedPerms = false;
+          try {
+            const storedPermsVal = await AsyncStorage.getItem('permissions_completed');
+            storedPerms = storedPermsVal === 'true' || onboardingDone;
+          } catch (e) {
+            storedPerms = onboardingDone;
+          }
+
+          set({
+            user: currentUser,
+            profile: currentProfile,
+            isAuthenticated: true,
+            isOnboardingCompleted: onboardingDone,
+            hasStarted: true,
+            language_selected: true,
+            permissions_completed: storedPerms,
+            language: currentProfile?.language || 'English',
+            locationName: currentProfile?.location_name || 'Detecting Location...',
+            latitude: currentProfile?.location_lat || null,
+            longitude: currentProfile?.location_lng || null,
+          });
+
+          await get().loadUserData(currentUser.id);
+        } else if (event === 'SIGNED_OUT' || (event === 'INITIAL_SESSION' && !session?.user)) {
+          // Reset store states and clear invalid cache
+          set({
+            user: null,
+            profile: null,
+            isAuthenticated: false,
+            isOnboardingCompleted: false,
+            permissions_completed: false,
+            unreadNotificationsCount: 0,
+          });
+          AsyncStorage.removeItem('cached_user').catch(() => {});
+          AsyncStorage.removeItem('cached_profile').catch(() => {});
+        }
+      });
+
     } catch (error) {
       console.error('Error initializing session:', error);
+      // Fallback
+      if (cachedUser && cachedProfile) {
+        set({
+          user: cachedUser,
+          profile: cachedProfile,
+          isAuthenticated: true,
+          isOnboardingCompleted: true,
+          hasStarted: true,
+          language_selected: true,
+          permissions_completed: true,
+        });
+      }
     } finally {
       set({ isLoading: false });
     }
@@ -383,6 +631,15 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }
 
+      // Clean up cached user, profile and permissions
+      try {
+        await AsyncStorage.removeItem('cached_user');
+        await AsyncStorage.removeItem('cached_profile');
+        await AsyncStorage.removeItem('permissions_completed');
+      } catch (err) {
+        console.warn('Failed to clean up cached user/profile during logout:', err);
+      }
+
       await authService.signOut();
       
       // Reset calendar tasks to defaults upon logout
@@ -396,7 +653,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         profile: null,
         isAuthenticated: false,
         isOnboardingCompleted: false,
+        permissions_completed: false,
         hasStarted: true,
+        language_selected: true,
         allCalendarTasks: defaultAll,
         calendarTasks: mockCropTimeline['Rice'],
         diagnosesHistory: [],

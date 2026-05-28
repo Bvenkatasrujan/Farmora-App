@@ -50,7 +50,7 @@ export default function LanguageSelectionScreen() {
   const fromProfile = params.from === 'profile';
   const insets = useSafeAreaInsets();
 
-  const { user, profile, setLanguage, setProfile } = useAppStore();
+  const { user, profile, setLanguage, setProfile, setLanguageSelected } = useAppStore();
   const { t } = useTranslation();
   const { setLanguage: setLangStoreLanguage } = useLanguageStore();
 
@@ -74,6 +74,9 @@ export default function LanguageSelectionScreen() {
 
       // 2. Set Language Store Code
       setLangStoreLanguage(code);
+
+      // 3. Mark language as selected (persisted)
+      await setLanguageSelected(true);
       
       const updatedProfile = {
         ...profile,
@@ -85,7 +88,7 @@ export default function LanguageSelectionScreen() {
       if (user?.id && !user.id.startsWith('mock_')) {
         await authService.upsertProfile(updatedProfile);
       }
-      setProfile(updatedProfile);
+      await setProfile(updatedProfile);
 
       // --- GOOGLE TRANSLATE FOR WEB ---
       if (Platform.OS === 'web') {

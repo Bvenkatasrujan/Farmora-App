@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, Switch, Alert, ActivityIndicator } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Key, ShieldCheck, Smartphone, Eye, EyeOff } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -10,6 +10,9 @@ import { FarmoraColors } from '../constants/colors';
 
 export default function SecurityScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const isRecovery = params?.recovery === 'true';
+
   const insets = useSafeAreaInsets();
   const { user } = useAppStore();
   const userId = user?.id || 'guest';
@@ -19,57 +22,15 @@ export default function SecurityScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
 
-  const [twoFactor, setTwoFactor] = useState(false);
-  const [biometrics, setBiometrics] = useState(true);
   const [updatingPass, setUpdatingPass] = useState(false);
 
-  // Load saved preferences on mount
-  useEffect(() => {
-    const loadPreferences = async () => {
-      try {
-        const storedBiometrics = await AsyncStorage.getItem(`security_biometrics_${userId}`);
-        const storedTwoFactor = await AsyncStorage.getItem(`security_twoFactor_${userId}`);
-
-        if (storedBiometrics !== null) {
-          setBiometrics(storedBiometrics === 'true');
-        } else {
-          setBiometrics(true); // Default to true
-        }
-
-        if (storedTwoFactor !== null) {
-          setTwoFactor(storedTwoFactor === 'true');
-        } else {
-          setTwoFactor(false); // Default to false
-        }
-      } catch (err) {
-        console.error('Failed to load security preferences:', err);
-      }
-    };
-
-    loadPreferences();
-  }, [userId]);
-
-  const handleToggleBiometrics = async (value: boolean) => {
-    setBiometrics(value);
-    try {
-      await AsyncStorage.setItem(`security_biometrics_${userId}`, value ? 'true' : 'false');
-    } catch (err) {
-      console.error('Failed to save biometric setting:', err);
-    }
-  };
-
-  const handleToggleTwoFactor = async (value: boolean) => {
-    setTwoFactor(value);
-    try {
-      await AsyncStorage.setItem(`security_twoFactor_${userId}`, value ? 'true' : 'false');
-    } catch (err) {
-      console.error('Failed to save 2FA setting:', err);
-    }
-  };
-
   const handleUpdatePassword = async () => {
-    if (!oldPassword || !newPassword || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all password fields.');
+    if (!isRecovery && !oldPassword) {
+      Alert.alert('Error', 'Please fill in your current password.');
+      return;
+    }
+    if (!newPassword || !confirmPassword) {
+      Alert.alert('Error', 'Please fill in the new password fields.');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -92,8 +53,8 @@ export default function SecurityScreen() {
         // Simulate API call for mock user
         await new Promise((resolve) => setTimeout(resolve, 1000));
       } else {
-        // For real users, check current password first by signing in
-        if (user.email) {
+        // For real users, check current password first by signing in (UNLESS IN RECOVERY MODE)
+        if (!isRecovery && user.email) {
           try {
             await authService.signIn(user.email, oldPassword);
           } catch (err: any) {
@@ -145,48 +106,7 @@ export default function SecurityScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 60 }}
       >
-        {/* Toggle settings */}
-        <View className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm mb-6">
-          <Text style={{ fontFamily: 'Inter', fontSize: 14, fontWeight: '800', color: '#0F172A' }} className="mb-4">
-            Security Preferences
-          </Text>
 
-          {/* Biometrics */}
-          <View className="flex-row items-center justify-between py-3 border-b border-slate-50">
-            <View className="flex-1 pr-4">
-              <Text style={{ fontFamily: 'Inter', fontSize: 13, fontWeight: '700', color: '#1E293B' }}>
-                Biometric Identification
-              </Text>
-              <Text style={{ fontFamily: 'Inter', fontSize: 11, fontWeight: '600', color: '#64748B', marginTop: 2 }}>
-                Use FaceID/TouchID to unlock Farmora.
-              </Text>
-            </View>
-            <Switch
-              value={biometrics}
-              onValueChange={handleToggleBiometrics}
-              trackColor={{ false: '#e2e8f0', true: '#a7f3d0' }}
-              thumbColor={biometrics ? '#059669' : '#cbd5e1'}
-            />
-          </View>
-
-          {/* 2FA */}
-          <View className="flex-row items-center justify-between py-3">
-            <View className="flex-1 pr-4">
-              <Text style={{ fontFamily: 'Inter', fontSize: 13, fontWeight: '700', color: '#1E293B' }}>
-                Two-Factor Auth (2FA)
-              </Text>
-              <Text style={{ fontFamily: 'Inter', fontSize: 11, fontWeight: '600', color: '#64748B', marginTop: 2 }}>
-                Confirm sign-ins with an OTP sent to your phone.
-              </Text>
-            </View>
-            <Switch
-              value={twoFactor}
-              onValueChange={handleToggleTwoFactor}
-              trackColor={{ false: '#e2e8f0', true: '#a7f3d0' }}
-              thumbColor={twoFactor ? '#059669' : '#cbd5e1'}
-            />
-          </View>
-        </View>
 
         {/* Change Password Form */}
         <View className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm mb-6">
@@ -197,21 +117,23 @@ export default function SecurityScreen() {
             </Text>
           </View>
 
-          {/* Old password */}
-          <View className="mb-4">
-            <Text style={{ fontFamily: 'Inter', fontSize: 11, fontWeight: '700', color: '#475569' }} className="mb-1.5 uppercase">
-              Current Password
-            </Text>
-            <TextInput
-              secureTextEntry={!showPass}
-              value={oldPassword}
-              onChangeText={setOldPassword}
-              placeholder="••••••••"
-              placeholderTextColor="#94A3B8"
-              className="bg-slate-50 border border-slate-100 px-4 py-3 rounded-2xl text-slate-800"
-              style={{ fontFamily: 'Inter', fontSize: 13 }}
-            />
-          </View>
+          {/* Old password - HIDE IF RECOVERY */}
+          {!isRecovery && (
+            <View className="mb-4">
+              <Text style={{ fontFamily: 'Inter', fontSize: 11, fontWeight: '700', color: '#475569' }} className="mb-1.5 uppercase">
+                Current Password
+              </Text>
+              <TextInput
+                secureTextEntry={!showPass}
+                value={oldPassword}
+                onChangeText={setOldPassword}
+                placeholder="••••••••"
+                placeholderTextColor="#94A3B8"
+                className="bg-slate-50 border border-slate-100 px-4 py-3 rounded-2xl text-slate-800"
+                style={{ fontFamily: 'Inter', fontSize: 13 }}
+              />
+            </View>
+          )}
 
           {/* New password */}
           <View className="mb-4">
@@ -270,28 +192,44 @@ export default function SecurityScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Sessions details */}
-        <View className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm mb-6">
-          <View className="flex-row items-center gap-2 mb-4">
-            <Smartphone size={18} color="#475569" />
-            <Text style={{ fontFamily: 'Inter', fontSize: 14, fontWeight: '800', color: '#0F172A' }}>
-              Active Sessions
+        {/* Delete Account Section */}
+        <View className="bg-red-50 rounded-3xl p-5 border border-red-100 shadow-sm mt-4">
+          <Text style={{ fontFamily: 'Inter', fontSize: 14, fontWeight: '800', color: '#B91C1C' }} className="mb-2">
+            Danger Zone
+          </Text>
+          <Text style={{ fontFamily: 'Inter', fontSize: 12, fontWeight: '500', color: '#991B1B', marginBottom: 16 }}>
+            Permanently delete your account and all associated data. This action cannot be undone.
+          </Text>
+          <TouchableOpacity
+            onPress={() => {
+              Alert.alert(
+                'Delete Account',
+                'Are you absolutely sure you want to permanently delete your account? This action cannot be undone and all your data will be lost.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { 
+                    text: 'Delete', 
+                    style: 'destructive',
+                    onPress: async () => {
+                      try {
+                        // Attempt to call backend deletion if available
+                        await authService.signOut(); // Logs out and clears session
+                        useAppStore.getState().logout();
+                        router.replace('/(auth)/splash');
+                      } catch (e: any) {
+                        Alert.alert('Error', 'Failed to delete account. Please try again.');
+                      }
+                    }
+                  }
+                ]
+              );
+            }}
+            className="bg-red-600 py-3.5 rounded-2xl items-center justify-center active:scale-[0.98]"
+          >
+            <Text style={{ fontFamily: 'Inter', fontSize: 13, fontWeight: '800', color: '#FFFFFF' }}>
+              Delete Account
             </Text>
-          </View>
-
-          <View className="flex-row items-start gap-3 py-2">
-            <View className="w-10 h-10 rounded-2xl bg-emerald-50 items-center justify-center border border-emerald-100">
-              <ShieldCheck size={20} color={FarmoraColors.primary} />
-            </View>
-            <View className="flex-1">
-              <Text style={{ fontFamily: 'Inter', fontSize: 13, fontWeight: '700', color: '#1E293B' }}>
-                This Mobile Device
-              </Text>
-              <Text style={{ fontFamily: 'Inter', fontSize: 11, fontWeight: '600', color: '#64748B', marginTop: 2 }}>
-                Active Now • Karnal, India
-              </Text>
-            </View>
-          </View>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </View>
